@@ -9,14 +9,10 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root {
-    --ink: #10142B;
-    --ink-soft: #666F8B;
-    --line: #E4E6F1;
     --brand: #3450E0;
     --success: #0E9F6E;
-    --success-soft: #E1F6EE;
+    --warning: #E2620B;
     --danger: #D8354A;
-    --danger-soft: #FBE7EA;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -28,9 +24,7 @@
     display: flex;
     flex-direction: column;
   }
-  .top {
-    padding: 16px;
-  }
+  .top { padding: 16px; }
   .eyebrow {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -45,6 +39,27 @@
     font-weight: 700;
     margin: 4px 0 12px;
   }
+  .stats-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat-pill {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .stat-pill .n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .stat-pill .l { font-size: 10px; color: rgba(255,255,255,0.55); margin-top: 2px; }
+  .stat-pill.ok .n { color: var(--success); }
+  .stat-pill.warn .n { color: var(--warning); }
+  .stat-pill.err .n { color: var(--danger); }
   .name-box input {
     width: 100%;
     padding: 12px 14px;
@@ -65,41 +80,57 @@
     font-family: 'Inter', sans-serif;
     margin-top: 12px;
   }
-  #reader {
-    width: 100%;
-    flex: 1;
-    display: none;
-  }
+  .start-btn:active { opacity: 0.85; }
+  #reader { width: 100%; flex: 1; display: none; position: relative; }
   #reader.show { display: block; }
   #reader video { width: 100% !important; }
+  .back-btn {
+    position: fixed;
+    top: 16px; left: 16px;
+    z-index: 20;
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border: none;
+    font-size: 18px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .back-btn.show { display: flex; }
   .feedback {
     position: fixed;
     left: 16px; right: 16px; bottom: 16px;
-    padding: 14px;
+    padding: 16px;
     border-radius: 12px;
     text-align: center;
     font-weight: 700;
-    font-size: 14px;
+    font-size: 15px;
     opacity: 0;
-    transition: opacity 0.2s;
+    transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
     pointer-events: none;
+    z-index: 10;
   }
-  .feedback.show { opacity: 1; }
+  .feedback.show { opacity: 1; transform: translateY(0); }
+  .feedback .sub { font-weight: 500; font-size: 12px; margin-top: 4px; opacity: 0.9; }
   .feedback.success { background: var(--success); }
+  .feedback.warning { background: var(--warning); }
   .feedback.error { background: var(--danger); }
   .feedback.info { background: var(--brand); }
-  .log {
-    padding: 12px 16px 90px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-  }
+  .log { padding: 12px 16px 100px; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
   .log-item {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
+    align-items: baseline;
+    padding: 9px 0;
     border-bottom: 1px solid rgba(255,255,255,0.08);
   }
+  .log-item .msg { font-size: 11px; font-family: 'Inter', sans-serif; opacity: 0.65; margin-top: 2px; }
+  .log-item .right { text-align: right; }
   .log-item .ok { color: #4ADE9C; }
+  .log-item .warn { color: #FFC97A; }
   .log-item .no { color: #FF7A8A; }
 </style>
 </head>
@@ -107,6 +138,13 @@
   <div class="top">
     <div class="eyebrow">FAN COURIER · SCANARE RAPIDA</div>
     <h1>Scaneaza retururile</h1>
+
+    <div class="stats-row">
+      <div class="stat-pill ok"><div class="n" id="cntOk">0</div><div class="l">Primite</div></div>
+      <div class="stat-pill warn"><div class="n" id="cntWarn">0</div><div class="l">Avertismente</div></div>
+      <div class="stat-pill err"><div class="n" id="cntErr">0</div><div class="l">Erori</div></div>
+    </div>
+
     <div class="name-box">
       <input id="numeInput" placeholder="Numele tau (ex. Ana)" />
     </div>
@@ -114,6 +152,7 @@
   </div>
 
   <div id="reader"></div>
+  <button id="backBtn" class="back-btn" onclick="stopScanning()">←</button>
   <div id="log" class="log"></div>
   <div id="feedback" class="feedback"></div>
 
@@ -129,6 +168,7 @@
 
   let scanner = null;
   let lastScanned = {};
+  let counts = { ok: 0, warn: 0, err: 0 };
   const logEl = document.getElementById('log');
 
   function startScanning() {
@@ -138,8 +178,11 @@
       return;
     }
     document.getElementById('startBtn').style.display = 'none';
+    document.querySelector('.stats-row').style.display = 'none';
+    document.querySelector('.name-box').style.display = 'none';
     const reader = document.getElementById('reader');
     reader.classList.add('show');
+    document.getElementById('backBtn').classList.add('show');
     scanner = new Html5Qrcode('reader');
     scanner.start(
       { facingMode: 'environment' },
@@ -147,8 +190,20 @@
       onScanSuccess,
       function () {}
     ).catch(function (err) {
-      showFeedback('Eroare camera: ' + (err && err.message ? err.message : err), 'error');
+      showFeedback('Eroare camera', (err && err.message ? err.message : String(err)), 'error');
     });
+  }
+
+  function stopScanning() {
+    document.getElementById('backBtn').classList.remove('show');
+    document.getElementById('reader').classList.remove('show');
+    document.getElementById('startBtn').style.display = 'block';
+    document.querySelector('.stats-row').style.display = 'flex';
+    document.querySelector('.name-box').style.display = 'block';
+    if (scanner) {
+      scanner.stop().then(function () { scanner.clear(); }).catch(function () {});
+      scanner = null;
+    }
   }
 
   function onScanSuccess(decodedText) {
@@ -157,35 +212,107 @@
     if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
     lastScanned[awb] = now;
 
-    const nume = nameInput.value.trim();
-    showFeedback('Se trimite ' + awb + '...', 'info');
-
-    const url = EXEC_URL + '?action=markReceivedByAwb&awb=' + encodeURIComponent(awb) + '&by=' + encodeURIComponent(nume);
-    fetch(url, { mode: 'no-cors' })
-      .then(function () {
-        showFeedback('✓ ' + awb + ' trimis', 'success');
-        addLog(awb, true);
-      })
-      .catch(function () {
-        showFeedback('✕ Eroare de retea la ' + awb, 'error');
-        addLog(awb, false);
-      });
+    if (navigator.vibrate) navigator.vibrate(40);
+    showFeedback('Se verifica ' + awb + '...', '', 'info');
+    callServer(awb);
   }
 
-  function addLog(awb, ok) {
+  /* ---- apel JSONP: citim raspunsul REAL de la server, ocolind blocajul CORS ---- */
+  function callServer(awb) {
+    const nume = nameInput.value.trim();
+    const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+    const script = document.createElement('script');
+    let finished = false;
+
+    const timeout = setTimeout(function () {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      handleResult(awb, { status: 'timeout', message: 'Fara raspuns de la server (verifica internetul)' });
+    }, 8000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function (result) {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      handleResult(awb, result);
+    };
+
+    script.onerror = function () {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      handleResult(awb, { status: 'network_error', message: 'Nu s-a putut contacta serverul' });
+    };
+
+    const url = EXEC_URL + '?action=markReceivedByAwb&awb=' + encodeURIComponent(awb) +
+      '&by=' + encodeURIComponent(nume) + '&callback=' + cbName;
+    script.src = url;
+    document.body.appendChild(script);
+  }
+
+  function handleResult(awb, result) {
+    const status = result.status;
+    const message = result.message || '';
+
+    if (status === 'ok') {
+      if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
+      showFeedback('✓ ' + awb, 'Marcat ca primit', 'success');
+      counts.ok++;
+      addLog(awb, 'ok', message);
+    } else if (status === 'already') {
+      if (navigator.vibrate) navigator.vibrate(80);
+      showFeedback('⚠ ' + awb, message, 'warning');
+      counts.warn++;
+      addLog(awb, 'warn', message);
+    } else if (status === 'wrong_status') {
+      if (navigator.vibrate) navigator.vibrate(80);
+      showFeedback('⚠ ' + awb, message, 'warning');
+      counts.warn++;
+      addLog(awb, 'warn', message);
+    } else if (status === 'busy') {
+      if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
+      showFeedback('✕ ' + awb, 'Server ocupat, rescaneaza', 'error');
+      counts.err++;
+      addLog(awb, 'no', message);
+    } else {
+      if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
+      showFeedback('✕ ' + awb, message || 'Eroare necunoscuta', 'error');
+      counts.err++;
+      addLog(awb, 'no', message);
+    }
+    updateCounters();
+  }
+
+  function updateCounters() {
+    document.getElementById('cntOk').textContent = counts.ok;
+    document.getElementById('cntWarn').textContent = counts.warn;
+    document.getElementById('cntErr').textContent = counts.err;
+  }
+
+  function addLog(awb, cls, message) {
     const item = document.createElement('div');
     item.className = 'log-item';
     const time = new Date().toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    item.innerHTML = '<span>' + awb + '</span><span class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓ ' : '✕ ') + time + '</span>';
+    const symbol = cls === 'ok' ? '✓' : (cls === 'warn' ? '⚠' : '✕');
+    item.innerHTML =
+      '<div><div>' + awb + '</div><div class="msg">' + message + '</div></div>' +
+      '<div class="right ' + cls + '">' + symbol + ' ' + time + '</div>';
     logEl.insertBefore(item, logEl.firstChild);
   }
 
-  function showFeedback(msg, type) {
+  function showFeedback(title, sub, type) {
     const el = document.getElementById('feedback');
-    el.textContent = msg;
+    el.innerHTML = title + (sub ? '<div class="sub">' + sub + '</div>' : '');
     el.className = 'feedback show ' + type;
     clearTimeout(window._fbTimer);
-    window._fbTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+    window._fbTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
   }
 </script>
 </body>
