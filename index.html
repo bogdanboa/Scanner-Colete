@@ -342,9 +342,9 @@
       pendingTimer = setTimeout(function () { pendingCode = ''; pendingCount = 0; resetIndicator(); }, 1500);
     }
 
-    flashIndicator('Citire ' + pendingCount + '/3 · ' + awb);
+    flashIndicator('Citire ' + pendingCount + '/2 · ' + awb);
 
-    if (pendingCount < 3) return;
+    if (pendingCount < 2) return;
 
     clearTimeout(pendingTimer);
     pendingCode = '';
