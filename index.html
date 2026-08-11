@@ -157,7 +157,6 @@
   <div id="feedback" class="feedback"></div>
 
 <script>
-  // ↓↓↓ INLOCUIESTE cu link-ul aplicatiei tale (cel care se termina in /exec) ↓↓↓
   const EXEC_URL = 'https://script.google.com/macros/s/AKfycbzuT48Ej6Ne7VIWIsrdhdtzfMldUiyIcaVXlvu8lxhcYQkh5VrFCXmXrJkVveuPQmVi/exec';
 
   const nameInput = document.getElementById('numeInput');
@@ -222,6 +221,15 @@
       updateCounters();
       return;
     }
+
+    const now = Date.now();
+    if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
+    lastScanned[awb] = now;
+
+    if (navigator.vibrate) navigator.vibrate(40);
+    showFeedback('Se verifica ' + awb + '...', '', 'info');
+    callServer(awb);
+  }
 
   /* ---- apel JSONP: citim raspunsul REAL de la server, ocolind blocajul CORS ---- */
   function callServer(awb) {
