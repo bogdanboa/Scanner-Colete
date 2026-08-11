@@ -207,7 +207,22 @@
   }
 
   function onScanSuccess(decodedText) {
-    const awb = (decodedText || '').trim();
+    const raw = (decodedText || '').trim();
+    const digitsOnly = raw.replace(/\D/g, '');
+    const awb = digitsOnly.slice(0, 13);
+
+    if (awb.length < 13) {
+      const now = Date.now();
+      if (lastScanned[raw] && now - lastScanned[raw] < 4000) return;
+      lastScanned[raw] = now;
+      if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
+      showFeedback('✕ Cod nerecunoscut', 'Prea scurt ca sa fie un AWB (' + digitsOnly.length + ' cifre)', 'error');
+      counts.err++;
+      addLog(raw || '(gol)', 'no', 'Cod nerecunoscut');
+      updateCounters();
+      return;
+    }
+
     const now = Date.now();
     if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
     lastScanned[awb] = now;
@@ -216,7 +231,6 @@
     showFeedback('Se verifica ' + awb + '...', '', 'info');
     callServer(awb);
   }
-
   /* ---- apel JSONP: citim raspunsul REAL de la server, ocolind blocajul CORS ---- */
   function callServer(awb) {
     const nume = nameInput.value.trim();
