@@ -183,9 +183,14 @@
     reader.classList.add('show');
     document.getElementById('backBtn').classList.add('show');
     scanner = new Html5Qrcode('reader');
+    scanner = new Html5Qrcode('reader', {
+      formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      verbose: false
+    });
     scanner.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 260, height: 140 } },
+      { fps: 15, qrbox: { width: 300, height: 100 }, disableFlip: true },
       onScanSuccess,
       function () {}
     ).catch(function (err) {
@@ -205,25 +210,37 @@
     }
   }
 
+  let pendingCode = '';
+  let pendingCount = 0;
+  let pendingTimer = null;
+
   function onScanSuccess(decodedText) {
     const raw = (decodedText || '').trim();
     const awb = raw.slice(0, 13);
     const isValidAwb = /^\d{13}$/.test(awb);
 
     if (!isValidAwb) {
-      const now = Date.now();
-      if (lastScanned[raw] && now - lastScanned[raw] < 4000) return;
-      lastScanned[raw] = now;
-      if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
-      showFeedback('✕ Cod nerecunoscut', 'Nu incepe cu 13 cifre valide de AWB', 'error');
-      counts.err++;
-      addLog(raw || '(gol)', 'no', 'Cod nerecunoscut');
-      updateCounters();
-      return;
+      pendingCode = '';
+      pendingCount = 0;
+      return; // ignoram silentios citirile invalide, ca sa nu spamam cu erori la fiecare cadru neclar
     }
 
     const now = Date.now();
     if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
+
+    if (awb === pendingCode) {
+      pendingCount++;
+    } else {
+      pendingCode = awb;
+      pendingCount = 1;
+      clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(function () { pendingCode = ''; pendingCount = 0; }, 1500);
+    }
+
+    if (pendingCount < 2) return; // asteptam a doua citire identica, ca sa confirmam
+
+    pendingCode = '';
+    pendingCount = 0;
     lastScanned[awb] = now;
 
     if (navigator.vibrate) navigator.vibrate(40);
