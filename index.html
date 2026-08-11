@@ -223,23 +223,6 @@
       return;
     }
 
-    const now = Date.now();
-    if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
-    lastScanned[awb] = now;
-
-    if (navigator.vibrate) navigator.vibrate(40);
-    showFeedback('Se verifica ' + awb + '...', '', 'info');
-    callServer(awb);
-  }
-
-    const now = Date.now();
-    if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
-    lastScanned[awb] = now;
-
-    if (navigator.vibrate) navigator.vibrate(40);
-    showFeedback('Se verifica ' + awb + '...', '', 'info');
-    callServer(awb);
-  }
   /* ---- apel JSONP: citim raspunsul REAL de la server, ocolind blocajul CORS ---- */
   function callServer(awb) {
     const nume = nameInput.value.trim();
