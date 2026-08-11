@@ -208,20 +208,29 @@
 
   function onScanSuccess(decodedText) {
     const raw = (decodedText || '').trim();
-    const digitsOnly = raw.replace(/\D/g, '');
-    const awb = digitsOnly.slice(0, 13);
+    const awb = raw.slice(0, 13);
+    const isValidAwb = /^\d{13}$/.test(awb);
 
-    if (awb.length < 13) {
+    if (!isValidAwb) {
       const now = Date.now();
       if (lastScanned[raw] && now - lastScanned[raw] < 4000) return;
       lastScanned[raw] = now;
       if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
-      showFeedback('✕ Cod nerecunoscut', 'Prea scurt ca sa fie un AWB (' + digitsOnly.length + ' cifre)', 'error');
+      showFeedback('✕ Cod nerecunoscut', 'Nu incepe cu 13 cifre valide de AWB', 'error');
       counts.err++;
       addLog(raw || '(gol)', 'no', 'Cod nerecunoscut');
       updateCounters();
       return;
     }
+
+    const now = Date.now();
+    if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
+    lastScanned[awb] = now;
+
+    if (navigator.vibrate) navigator.vibrate(40);
+    showFeedback('Se verifica ' + awb + '...', '', 'info');
+    callServer(awb);
+  }
 
     const now = Date.now();
     if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
