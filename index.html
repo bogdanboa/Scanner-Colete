@@ -99,6 +99,34 @@
     justify-content: center;
   }
   .back-btn.show { display: flex; }
+  .scan-indicator {
+    position: fixed;
+    top: 16px; left: 70px; right: 16px;
+    z-index: 20;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.55);
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    transition: background 0.15s, color 0.15s;
+  }
+  .scan-indicator.show { display: flex; }
+  .scan-indicator .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.4);
+    flex-shrink: 0;
+  }
+  .scan-indicator.hit {
+    background: rgba(14,159,110,0.85);
+    color: #fff;
+  }
+  .scan-indicator.hit .dot { background: #fff; }
   .feedback {
     position: fixed;
     left: 16px; right: 16px; bottom: 16px;
@@ -152,6 +180,7 @@
   </div>
 
   <div id="reader"></div>
+  <div id="scanIndicator" class="scan-indicator"></div>
   <button id="backBtn" class="back-btn" onclick="stopScanning()">←</button>
   <div id="log" class="log"></div>
   <div id="feedback" class="feedback"></div>
@@ -182,15 +211,14 @@
     const reader = document.getElementById('reader');
     reader.classList.add('show');
     document.getElementById('backBtn').classList.add('show');
-    scanner = new Html5Qrcode('reader');
+    document.getElementById('scanIndicator').classList.add('show');
     scanner = new Html5Qrcode('reader', {
       formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ],
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
       verbose: false
     });
     scanner.start(
       { facingMode: 'environment' },
-      { fps: 15, qrbox: { width: 300, height: 100 }, disableFlip: true },
+      { fps: 15, qrbox: { width: 300, height: 60 }, disableFlip: true },
       onScanSuccess,
       function () {}
     ).catch(function (err) {
@@ -199,6 +227,7 @@
   }
 
   function stopScanning() {
+    document.getElementById('scanIndicator').classList.remove('show', 'hit');
     document.getElementById('backBtn').classList.remove('show');
     document.getElementById('reader').classList.remove('show');
     document.getElementById('startBtn').style.display = 'block';
@@ -214,16 +243,26 @@
   let pendingCount = 0;
   let pendingTimer = null;
 
+  function flashIndicator(text) {
+    const el = document.getElementById('scanIndicator');
+    el.innerHTML = '<span class="dot"></span>' + text;
+    el.classList.add('hit');
+    clearTimeout(window._indicatorTimer);
+    window._indicatorTimer = setTimeout(function () { el.classList.remove('hit'); }, 350);
+  }
+
+  function resetIndicator() {
+    const el = document.getElementById('scanIndicator');
+    el.innerHTML = '<span class="dot"></span>Cauta cod...';
+    el.classList.remove('hit');
+  }
+
   function onScanSuccess(decodedText) {
     const raw = (decodedText || '').trim();
     const awb = raw.slice(0, 13);
     const isValidAwb = /^\d{13}$/.test(awb);
 
-    if (!isValidAwb) {
-      pendingCode = '';
-      pendingCount = 0;
-      return; // ignoram silentios citirile invalide, ca sa nu spamam cu erori la fiecare cadru neclar
-    }
+    if (!isValidAwb) return;
 
     const now = Date.now();
     if (lastScanned[awb] && now - lastScanned[awb] < 4000) return;
@@ -234,21 +273,24 @@
       pendingCode = awb;
       pendingCount = 1;
       clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(function () { pendingCode = ''; pendingCount = 0; }, 1500);
+      pendingTimer = setTimeout(function () { pendingCode = ''; pendingCount = 0; resetIndicator(); }, 1500);
     }
 
-    if (pendingCount < 2) return; // asteptam a doua citire identica, ca sa confirmam
+    flashIndicator('Citire ' + pendingCount + '/3 · ' + awb);
 
+    if (pendingCount < 3) return;
+
+    clearTimeout(pendingTimer);
     pendingCode = '';
     pendingCount = 0;
     lastScanned[awb] = now;
+    resetIndicator();
 
     if (navigator.vibrate) navigator.vibrate(40);
     showFeedback('Se verifica ' + awb + '...', '', 'info');
     callServer(awb);
   }
 
-  /* ---- apel JSONP: citim raspunsul REAL de la server, ocolind blocajul CORS ---- */
   function callServer(awb) {
     const nume = nameInput.value.trim();
     const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
